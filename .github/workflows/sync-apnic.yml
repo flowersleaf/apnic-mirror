@@ -1,0 +1,38 @@
+name: Sync APNIC Data
+
+on:
+  schedule:
+    # 每周日 UTC 19:23（即北京时间周一凌晨 03:23）执行一次，避开整点高峰
+    - cron: '23 19 * * 0'
+  # 允许随时在网页上手动点击运行测试
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download APNIC delegated-apnic-latest
+        run: |
+          curl -fSL --retry 3 --retry-delay 5 \
+            -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36" \
+            "https://ftp.apnic.net/apnic/stats/apnic/delegated-apnic-latest" \
+            -o delegated-apnic-latest
+
+          # 校验文件有效性（确保包含中国大陆数据且文件非空）
+          grep -q "apnic|CN|ipv4" delegated-apnic-latest
+          grep -q "apnic|CN|ipv6" delegated-apnic-latest
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add delegated-apnic-latest
+          if ! git diff --staged --quiet; then
+            git commit -m "Update delegated-apnic-latest ($(date -u +'%Y-%m-%d'))"
+            git push
+          else
+            echo "No changes to commit."
+          fi
